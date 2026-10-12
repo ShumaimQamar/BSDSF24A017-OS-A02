@@ -21,6 +21,7 @@ void print_long_format(const char *path, const char *filename);
 void print_column_display(char **filenames, int count, int max_len);
 void print_horizontal_display(char **filenames, int count, int max_len);
 void mode_to_letters(int mode, char str[]);
+int compare_names(const void *a, const void *b);
 
 int main(int argc, char *argv[])
 {
@@ -63,6 +64,14 @@ int main(int argc, char *argv[])
         }
     }
     return 0;
+}
+
+// Comparison helper function for qsort
+int compare_names(const void *a, const void *b)
+{
+    const char *str1 = *(const char **)a;
+    const char *str2 = *(const char **)b;
+    return strcmp(str1, str2);
 }
 
 void do_ls(const char *dir, enum DisplayMode mode)
@@ -128,7 +137,9 @@ void do_ls(const char *dir, enum DisplayMode mode)
         return;
     }
 
-    // Call display function based on selected mode
+    // Sort the array alphabetically before displaying
+    qsort(filenames, count, sizeof(char *), compare_names);
+
     if (mode == MODE_LONG)
     {
         for (int i = 0; i < count; i++)

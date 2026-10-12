@@ -25,3 +25,13 @@ The vertical ("down then across") layout requires significantly more pre-calcula
 
 ### 2. Strategy used to manage different display modes
 An `enum DisplayMode` (`MODE_VERTICAL`, `MODE_HORIZONTAL`, `MODE_LONG`) was declared to manage display states. The `getopt()` loop parses command-line arguments and sets the appropriate enum value based on `-l` or `-x`. Inside `do_ls()`, after reading all directory entries into an array, an `if/else` control structure checks the enum state and calls the matching function (`print_long_format`, `print_horizontal_display`, or `print_column_display`).
+
+## Feature 5 Report Questions
+
+### 1. Necessity of reading all entries into memory before sorting and drawbacks
+Sorting algorithms require random or sequential access to the full set of items to compare and order them. Because `readdir()` retrieves directory entries incrementally one entry at a time from disk in filesystem order (unsorted), all filenames must first be read and stored in memory before sorting can take place.
+**Drawback:** For extremely large directories containing millions of files, buffering all names in memory incurs significant dynamic memory (`RAM`) allocation overhead and noticeable latency delay before displaying any output.
+
+### 2. Purpose and signature of comparison function for qsort
+The function signature expected by `qsort()` is: `int compare(const void *a, const void *b);`.
+It accepts generic `const void *` pointers so `qsort()` can work with any data type. In our case, `a` and `b` point to elements in an array of `char *` pointers (i.e., `a` and `b` are `char **`). The function casts the arguments to `const char **`, dereferences them to obtain string pointers, and uses `strcmp()` to return a negative integer if `a < b`, zero if `a == b`, or a positive integer if `a > b`.
