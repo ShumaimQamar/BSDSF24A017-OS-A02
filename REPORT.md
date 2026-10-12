@@ -17,3 +17,11 @@ In "down then across" order, items are filled vertically column by column. A sin
 
 ### 2. Purpose of ioctl system call and limitations of fixed-width fallback
 The `ioctl()` system call with `TIOCGWINSZ` queries the terminal driver to obtain the current terminal window dimensions (`ws_col`). Without it, relying solely on an 80-column fallback would cause output wrapping or ugly truncation when terminal windows are widened or narrowed by the user.
+
+## Feature 4 Report Questions
+
+### 1. Comparison of vertical vs. horizontal display complexity
+The vertical ("down then across") layout requires significantly more pre-calculation. In vertical layout, items are indexed column-by-column, requiring explicit calculation of `total_rows` and dynamic offset indexing (`col * total_rows + row`) to print elements across columns line by line. In contrast, horizontal ("across") logic prints items strictly in sequence; it simply prints array elements from index `0` to `N-1` with padding, emitting a newline whenever `(i + 1) % cols == 0`.
+
+### 2. Strategy used to manage different display modes
+An `enum DisplayMode` (`MODE_VERTICAL`, `MODE_HORIZONTAL`, `MODE_LONG`) was declared to manage display states. The `getopt()` loop parses command-line arguments and sets the appropriate enum value based on `-l` or `-x`. Inside `do_ls()`, after reading all directory entries into an array, an `if/else` control structure checks the enum state and calls the matching function (`print_long_format`, `print_horizontal_display`, or `print_column_display`).

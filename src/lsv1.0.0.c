@@ -10,32 +10,42 @@
 #include <grp.h>
 #include <time.h>
 
-void do_ls(const char *dir, int l_flag);
+enum DisplayMode {
+    MODE_VERTICAL,   // Default: down then across
+    MODE_HORIZONTAL, // -x flag: row-major across
+    MODE_LONG        // -l flag: long format
+};
+
+void do_ls(const char *dir, enum DisplayMode mode);
 void print_long_format(const char *path, const char *filename);
 void print_column_display(char **filenames, int count, int max_len);
+void print_horizontal_display(char **filenames, int count, int max_len);
 void mode_to_letters(int mode, char str[]);
 
 int main(int argc, char *argv[])
 {
     int opt;
-    int l_flag = 0;
+    enum DisplayMode mode = MODE_VERTICAL;
 
-    while ((opt = getopt(argc, argv, "l")) != -1)
+    while ((opt = getopt(argc, argv, "lx")) != -1)
     {
         switch (opt)
         {
         case 'l':
-            l_flag = 1;
+            mode = MODE_LONG;
+            break;
+        case 'x':
+            mode = MODE_HORIZONTAL;
             break;
         default:
-            fprintf(stderr, "Usage: %s [-l] [directory...]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-l] [-x] [directory...]\n", argv[0]);
             exit(EXIT_FAILURE);
         }
     }
 
     if (optind == argc)
     {
-        do_ls(".", l_flag);
+        do_ls(".", mode);
     }
     else
     {
@@ -45,7 +55,7 @@ int main(int argc, char *argv[])
             {
                 printf("%s:\n", argv[i]);
             }
-            do_ls(argv[i], l_flag);
+            do_ls(argv[i], mode);
             if (i < argc - 1)
             {
                 puts("");
@@ -55,7 +65,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-void do_ls(const char *dir, int l_flag)
+void do_ls(const char *dir, enum DisplayMode mode)
 {
     struct dirent *entry;
     DIR *dp = opendir(dir);
@@ -66,7 +76,6 @@ void do_ls(const char *dir, int l_flag)
         return;
     }
 
-    // Dynamic array to store filenames
     int capacity = 10;
     int count = 0;
     char **filenames = malloc(capacity * sizeof(char *));
@@ -119,19 +128,23 @@ void do_ls(const char *dir, int l_flag)
         return;
     }
 
-    if (l_flag)
+    // Call display function based on selected mode
+    if (mode == MODE_LONG)
     {
         for (int i = 0; i < count; i++)
         {
             print_long_format(dir, filenames[i]);
         }
     }
+    else if (mode == MODE_HORIZONTAL)
+    {
+        print_horizontal_display(filenames, count, max_len);
+    }
     else
     {
         print_column_display(filenames, count, max_len);
     }
 
-    // Free allocated memory
     for (int i = 0; i < count; i++)
     {
         free(filenames[i]);
@@ -139,25 +152,48 @@ void do_ls(const char *dir, int l_flag)
     free(filenames);
 }
 
-void print_column_display(char **filenames, int count, int max_len)
+void print_horizontal_display(char **filenames, int count, int max_len)
 {
     struct winsize w;
-    int term_width = 80; // Default fallback width
+    int term_width = 80;
 
-    // Detect terminal size using ioctl
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col > 0)
     {
         term_width = w.ws_col;
     }
 
-    int col_width = max_len + 2; // Maximum filename length + 2 spaces spacing
+    int col_width = max_len + 2;
+    int cols = term_width / col_width;
+    if (cols < 1)
+        cols = 1;
+
+    for (int i = 0; i < count; i++)
+    {
+        printf("%-*s", col_width, filenames[i]);
+        if ((i + 1) % cols == 0 || i == count - 1)
+        {
+            printf("\n");
+        }
+    }
+}
+
+void print_column_display(char **filenames, int count, int max_len)
+{
+    struct winsize w;
+    int term_width = 80;
+
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col > 0)
+    {
+        term_width = w.ws_col;
+    }
+
+    int col_width = max_len + 2;
     int cols = term_width / col_width;
     if (cols < 1)
         cols = 1;
 
     int rows = (count + cols - 1) / cols;
 
-    // Down then across printing logic
     for (int row = 0; row < rows; row++)
     {
         for (int col = 0; col < cols; col++)
