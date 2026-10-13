@@ -10,6 +10,14 @@
 #include <grp.h>
 #include <time.h>
 
+// Task 2: ANSI Color Escape Sequences Macros
+#define COLOR_RESET     "\033[0m"
+#define COLOR_BLUE      "\033[1;34m" // Directories
+#define COLOR_GREEN     "\033[1;32m" // Executables
+#define COLOR_RED       "\033[1;31m" // Tarballs (.tar, .gz, .zip)
+#define COLOR_PINK      "\033[1;35m" // Symbolic Links (Magenta)
+#define COLOR_REVERSE   "\033[7m"    // Special files (devices, sockets, fifos)
+
 enum DisplayMode {
     MODE_VERTICAL,   // Default: down then across
     MODE_HORIZONTAL, // -x flag: row-major across
@@ -18,10 +26,12 @@ enum DisplayMode {
 
 void do_ls(const char *dir, enum DisplayMode mode);
 void print_long_format(const char *path, const char *filename);
-void print_column_display(char **filenames, int count, int max_len);
-void print_horizontal_display(char **filenames, int count, int max_len);
+void print_column_display(const char *dir, char **filenames, int count, int max_len);
+void print_horizontal_display(const char *dir, char **filenames, int count, int max_len);
 void mode_to_letters(int mode, char str[]);
 int compare_names(const void *a, const void *b);
+const char *get_color_code(const char *path, const char *filename);
+int is_tarball(const char *filename);
 
 int main(int argc, char *argv[])
 {
@@ -66,7 +76,65 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// Comparison helper function for qsort
+// Helper to check for tarball/compressed extensions
+int is_tarball(const char *filename)
+{
+    const char *dot = strrchr(filename, '.');
+    if (!dot) return 0;
+
+    if (strcmp(dot, ".tar") == 0 || strcmp(dot, ".gz") == 0 || strcmp(dot, ".zip") == 0)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+// Task 3 & 4: Get color code based on st_mode and filename
+const char *get_color_code(const char *path, const char *filename)
+{
+    struct stat info;
+    char fullpath[1024];
+    snprintf(fullpath, sizeof(fullpath), "%s/%s", path, filename);
+
+    if (lstat(fullpath, &info) == -1)
+    {
+        return COLOR_RESET;
+    }
+
+    // Symbolic Link -> Pink/Magenta
+    if (S_ISLNK(info.st_mode))
+    {
+        return COLOR_PINK;
+    }
+
+    // Directory -> Blue
+    if (S_ISDIR(info.st_mode))
+    {
+        return COLOR_BLUE;
+    }
+
+    // Special Files (Character/Block Devices, FIFOs, Sockets) -> Reverse Video
+    if (S_ISCHR(info.st_mode) || S_ISBLK(info.st_mode) || 
+        S_ISFIFO(info.st_mode) || S_ISSOCK(info.st_mode))
+    {
+        return COLOR_REVERSE;
+    }
+
+    // Tarballs (.tar, .gz, .zip) -> Red
+    if (is_tarball(filename))
+    {
+        return COLOR_RED;
+    }
+
+    // Executables (Check execute bits) -> Green
+    if (info.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
+    {
+        return COLOR_GREEN;
+    }
+
+    return COLOR_RESET;
+}
+
 int compare_names(const void *a, const void *b)
 {
     const char *str1 = *(const char **)a;
@@ -137,7 +205,6 @@ void do_ls(const char *dir, enum DisplayMode mode)
         return;
     }
 
-    // Sort the array alphabetically before displaying
     qsort(filenames, count, sizeof(char *), compare_names);
 
     if (mode == MODE_LONG)
@@ -149,11 +216,11 @@ void do_ls(const char *dir, enum DisplayMode mode)
     }
     else if (mode == MODE_HORIZONTAL)
     {
-        print_horizontal_display(filenames, count, max_len);
+        print_horizontal_display(dir, filenames, count, max_len);
     }
     else
     {
-        print_column_display(filenames, count, max_len);
+        print_column_display(dir, filenames, count, max_len);
     }
 
     for (int i = 0; i < count; i++)
@@ -163,7 +230,7 @@ void do_ls(const char *dir, enum DisplayMode mode)
     free(filenames);
 }
 
-void print_horizontal_display(char **filenames, int count, int max_len)
+void print_horizontal_display(const char *dir, char **filenames, int count, int max_len)
 {
     struct winsize w;
     int term_width = 80;
@@ -180,15 +247,24 @@ void print_horizontal_display(char **filenames, int count, int max_len)
 
     for (int i = 0; i < count; i++)
     {
-        printf("%-*s", col_width, filenames[i]);
+        const char *color = get_color_code(dir, filenames[i]);
+        int name_len = strlen(filenames[i]);
+        int padding = col_width - name_len;
+
+        printf("%s%s%s", color, filenames[i], COLOR_RESET);
+
         if ((i + 1) % cols == 0 || i == count - 1)
         {
             printf("\n");
         }
+        else
+        {
+            printf("%*s", padding, "");
+        }
     }
 }
 
-void print_column_display(char **filenames, int count, int max_len)
+void print_column_display(const char *dir, char **filenames, int count, int max_len)
 {
     struct winsize w;
     int term_width = 80;
@@ -212,13 +288,17 @@ void print_column_display(char **filenames, int count, int max_len)
             int index = col * rows + row;
             if (index < count)
             {
+                const char *color = get_color_code(dir, filenames[index]);
+                int name_len = strlen(filenames[index]);
+
                 if (col == cols - 1 || index + rows >= count)
                 {
-                    printf("%s", filenames[index]);
+                    printf("%s%s%s", color, filenames[index], COLOR_RESET);
                 }
                 else
                 {
-                    printf("%-*s", col_width, filenames[index]);
+                    int padding = col_width - name_len;
+                    printf("%s%s%s%*s", color, filenames[index], COLOR_RESET, padding, "");
                 }
             }
         }
@@ -252,14 +332,18 @@ void print_long_format(const char *path, const char *filename)
     struct tm *tm_info = localtime(&info.st_mtime);
     strftime(time_buf, sizeof(time_buf), "%b %d %H:%M", tm_info);
 
-    printf("%s %2ld %-8s %-8s %8lld %s %s\n",
+    const char *color = get_color_code(path, filename);
+
+    printf("%s %2ld %-8s %-8s %8lld %s %s%s%s\n",
            mode_str,
            (long)info.st_nlink,
            user_name,
            group_name,
            (long long)info.st_size,
            time_buf,
-           filename);
+           color,
+           filename,
+           COLOR_RESET);
 }
 
 void mode_to_letters(int mode, char str[])

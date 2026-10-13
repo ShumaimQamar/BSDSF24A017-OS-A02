@@ -35,3 +35,23 @@ Sorting algorithms require random or sequential access to the full set of items 
 ### 2. Purpose and signature of comparison function for qsort
 The function signature expected by `qsort()` is: `int compare(const void *a, const void *b);`.
 It accepts generic `const void *` pointers so `qsort()` can work with any data type. In our case, `a` and `b` point to elements in an array of `char *` pointers (i.e., `a` and `b` are `char **`). The function casts the arguments to `const char **`, dereferences them to obtain string pointers, and uses `strcmp()` to return a negative integer if `a < b`, zero if `a == b`, or a positive integer if `a > b`.
+
+## Feature 6 Report Questions
+
+### 1. How ANSI escape sequences function in terminal output
+ANSI escape sequences are special character sequences beginning with an Escape character (`\033` or `\e`) followed by `[` and formatting codes ending in `m`. When printed to standard output, the terminal emulator intercepts these control sequences to alter text presentation attributes (such as foreground color, background color, or bold styling) rather than rendering the raw characters on screen. Resetting with `\033[0m` restores standard terminal attributes.
+
+### Execution Permission Bits in `st_mode`
+
+To determine if a file is executable, check the three execute permission bit flags in `st_mode` using bitwise AND (`&`) operations:
+
+* **Owner (User):** `S_IXUSR`
+* **Group:** `S_IXGRP`
+* **Others:** `S_IXOTH`
+
+**C Implementation:**
+```c
+if (info.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
+    // File is executable by owner, group, or others -> Color Green
+}
+
