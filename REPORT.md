@@ -49,12 +49,6 @@ To determine if a file is executable, check the three execute permission bit fla
 * **Group:** `S_IXGRP`
 * **Others:** `S_IXOTH`
 
-**C Implementation:**
-```c
-if (info.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
-    // File is executable by owner, group, or others -> Color Green
-}
-
 ## Feature 7 Report Questions: Recursive Listing (-R)
 
 ### 1. What is a "base case" in a recursive function, and what is the base case in `ls -R`?
