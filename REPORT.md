@@ -55,3 +55,65 @@ if (info.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
     // File is executable by owner, group, or others -> Color Green
 }
 
+## Feature 7 Report Questions: Recursive Listing (-R)
+
+### 1. What is a "base case" in a recursive function, and what is the base case in `ls -R`?
+A **base case** is the terminating condition in a recursive function that prevents it from making further recursive calls, avoiding infinite loops and stack overflow errors.
+
+In `ls -R`, the base case occurs when `do_ls()` encounters a directory that contains **no further subdirectories** (or a directory where all entries are regular files, devices, or symbolic links). Additionally, ignoring the special relative directory entries (`.` and `..`) acts as a crucial guard condition to prevent infinite self-referential recursion.
+
+### 2. Why is constructing a full path ("parent_dir/subdir") essential before making a recursive call?
+System calls like `opendir()` and `lstat()` operate relative to the process's current working directory (CWD) unless provided with an absolute or fully qualified relative path.
+
+If `do_ls("parent_dir")` simply called `do_ls("subdir")` without constructing `"parent_dir/subdir"`, `opendir()` would search for `"subdir"` directly inside the process's working directory rather than inside `"parent_dir"`. This would fail with `ENOENT` ("No such file or directory") or mistakenly read a completely different directory of the same name at the root execution level. Constructing the full path ensures accurate file identification across arbitrary tree depths.
+
+
+## Feature 7 Report Questions: Recursive Listing (-R)
+
+### Question 1: In a recursive function, what is a "base case"? In the context of your recursive `ls`, what is the base case that stops the recursion from continuing forever?
+
+**Answer:**
+A **base case** is the terminating condition in a recursive function that stops it from making further calls to itself, preventing infinite recursion and stack overflow errors.
+
+In the context of the custom recursive `ls` implementation (`do_ls`), the base case occurs when:
+1. **No Subdirectories Remain:** `do_ls` processes a directory that contains no subdirectories (i.e., it contains only regular files, devices, symbolic links, or is empty). When the loop checking for `S_ISDIR` finds zero subdirectories, no further recursive calls are made, and the function returns up the call stack.
+2. **Ignoring Relative Entries (`.` and `..`):** Explicitly ignoring `.` (current directory) and `..` (parent directory) acts as a critical guard condition. If these were processed as normal subdirectories, `do_ls(".")` would call `do_ls("./.")` infinitely, leading to immediate stack exhaustion.
+
+---
+
+### Question 2: Explain why it is essential to construct a full path (e.g., "parent_dir/subdir") before making a recursive call. What would happen if you simply called `do_ls("subdir")` from within the `do_ls("parent_dir")` function call?
+
+**Answer:**
+Constructing the full path (e.g., `"parent_dir/subdir"`) is essential because POSIX system calls like `opendir()` and `lstat()` resolve relative file paths based on the **Process Current Working Directory (CWD)**, not relative to the directory currently being processed inside `do_ls()`.
+
+If you were to simply call `do_ls("subdir")` from inside `do_ls("parent_dir")`:
+1. `opendir("subdir")` would look for `subdir` in the current working directory from where the program was launched, rather than inside `parent_dir/`.
+2. **Path Resolution Failure (`ENOENT`):** Unless a folder named `subdir` happens to exist in the root execution directory, `opendir()` will fail and return `NULL` with "No such file or directory".
+3. **Incorrect Traversal:** If a directory named `subdir` happens to exist in the execution folder, `do_ls` would read the wrong directory entirely, resulting in corrupted listing output and broken file tree navigation.
+
+Combining the parent directory string with the child entry name (using `snprintf(fullpath, sizeof(fullpath), "%s/%s", dir, entry)`) guarantees that `opendir()` and `lstat()` receive a valid path relative to the process execution point, enabling proper traversal across arbitrary folder depths.
+
+## Feature 7 Report Questions: Recursive Listing (-R)
+
+### Question 1: In a recursive function, what is a "base case"? In the context of your recursive `ls`, what is the base case that stops the recursion from continuing forever?
+
+**Answer:**
+A **base case** is the terminating condition in a recursive function that stops it from making further calls to itself, preventing infinite recursion and stack overflow errors.
+
+In the context of the custom recursive `ls` implementation (`do_ls`), the base case occurs when:
+1. **No Subdirectories Remain:** `do_ls` processes a directory that contains no subdirectories (i.e., it contains only regular files, devices, symbolic links, or is empty). When the loop checking for `S_ISDIR` finds zero subdirectories, no further recursive calls are made, and the function returns up the call stack.
+2. **Ignoring Relative Entries (`.` and `..`):** Explicitly ignoring `.` (current directory) and `..` (parent directory) acts as a critical guard condition. If these were processed as normal subdirectories, `do_ls(".")` would call `do_ls("./.")` infinitely, leading to immediate stack exhaustion.
+
+---
+
+### Question 2: Explain why it is essential to construct a full path (e.g., "parent_dir/subdir") before making a recursive call. What would happen if you simply called `do_ls("subdir")` from within the `do_ls("parent_dir")` function call?
+
+**Answer:**
+Constructing the full path (e.g., `"parent_dir/subdir"`) is essential because POSIX system calls like `opendir()` and `lstat()` resolve relative file paths based on the **Process Current Working Directory (CWD)**, not relative to the directory currently being processed inside `do_ls()`.
+
+If you were to simply call `do_ls("subdir")` from inside `do_ls("parent_dir")`:
+1. `opendir("subdir")` would look for `subdir` in the current working directory from where the program was launched, rather than inside `parent_dir/`.
+2. **Path Resolution Failure (`ENOENT`):** Unless a folder named `subdir` happens to exist in the root execution directory, `opendir()` will fail and return `NULL` with "No such file or directory".
+3. **Incorrect Traversal:** If a directory named `subdir` happens to exist in the execution folder, `do_ls` would read the wrong directory entirely, resulting in corrupted listing output and broken file tree navigation.
+
+Combining the parent directory string with the child entry name (using `snprintf(fullpath, sizeof(fullpath), "%s/%s", dir, entry)`) guarantees that `opendir()` and `lstat()` receive a valid path relative to the process execution point, enabling proper traversal across arbitrary folder depths.
