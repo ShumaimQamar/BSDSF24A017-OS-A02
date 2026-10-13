@@ -10,13 +10,12 @@
 #include <grp.h>
 #include <time.h>
 
-// Task 2: ANSI Color Escape Sequences Macros
 #define COLOR_RESET     "\033[0m"
 #define COLOR_BLUE      "\033[1;34m" // Directories
 #define COLOR_GREEN     "\033[1;32m" // Executables
 #define COLOR_RED       "\033[1;31m" // Tarballs (.tar, .gz, .zip)
-#define COLOR_PINK      "\033[1;35m" // Symbolic Links (Magenta)
-#define COLOR_REVERSE   "\033[7m"    // Special files (devices, sockets, fifos)
+#define COLOR_PINK      "\033[1;35m" // Symbolic Links
+#define COLOR_REVERSE   "\033[7m"    // Special files
 
 enum DisplayMode {
     MODE_VERTICAL,   // Default: down then across
@@ -24,7 +23,7 @@ enum DisplayMode {
     MODE_LONG        // -l flag: long format
 };
 
-void do_ls(const char *dir, enum DisplayMode mode);
+void do_ls(const char *dir, enum DisplayMode mode, int recursive, int is_first_dir);
 void print_long_format(const char *path, const char *filename);
 void print_column_display(const char *dir, char **filenames, int count, int max_len);
 void print_horizontal_display(const char *dir, char **filenames, int count, int max_len);
@@ -37,8 +36,9 @@ int main(int argc, char *argv[])
 {
     int opt;
     enum DisplayMode mode = MODE_VERTICAL;
+    int recursive_flag = 0; // Task 2: Tracking -R option
 
-    while ((opt = getopt(argc, argv, "lx")) != -1)
+    while ((opt = getopt(argc, argv, "lxR")) != -1)
     {
         switch (opt)
         {
@@ -48,25 +48,28 @@ int main(int argc, char *argv[])
         case 'x':
             mode = MODE_HORIZONTAL;
             break;
+        case 'R':
+            recursive_flag = 1;
+            break;
         default:
-            fprintf(stderr, "Usage: %s [-l] [-x] [directory...]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-l] [-x] [-R] [directory...]\n", argv[0]);
             exit(EXIT_FAILURE);
         }
     }
 
     if (optind == argc)
     {
-        do_ls(".", mode);
+        do_ls(".", mode, recursive_flag, 1);
     }
     else
     {
         for (int i = optind; i < argc; i++)
         {
-            if (argc - optind > 1)
+            if (argc - optind > 1 || recursive_flag)
             {
                 printf("%s:\n", argv[i]);
             }
-            do_ls(argv[i], mode);
+            do_ls(argv[i], mode, recursive_flag, 1);
             if (i < argc - 1)
             {
                 puts("");
@@ -76,7 +79,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// Helper to check for tarball/compressed extensions
+// Check for tarball extension
 int is_tarball(const char *filename)
 {
     const char *dot = strrchr(filename, '.');
@@ -89,7 +92,7 @@ int is_tarball(const char *filename)
     return 0;
 }
 
-// Task 3 & 4: Get color code based on st_mode and filename
+// Get color code string based on st_mode and filename
 const char *get_color_code(const char *path, const char *filename)
 {
     struct stat info;
@@ -101,36 +104,17 @@ const char *get_color_code(const char *path, const char *filename)
         return COLOR_RESET;
     }
 
-    // Symbolic Link -> Pink/Magenta
-    if (S_ISLNK(info.st_mode))
-    {
-        return COLOR_PINK;
-    }
+    if (S_ISLNK(info.st_mode)) return COLOR_PINK;
+    if (S_ISDIR(info.st_mode)) return COLOR_BLUE;
 
-    // Directory -> Blue
-    if (S_ISDIR(info.st_mode))
-    {
-        return COLOR_BLUE;
-    }
-
-    // Special Files (Character/Block Devices, FIFOs, Sockets) -> Reverse Video
     if (S_ISCHR(info.st_mode) || S_ISBLK(info.st_mode) || 
         S_ISFIFO(info.st_mode) || S_ISSOCK(info.st_mode))
     {
         return COLOR_REVERSE;
     }
 
-    // Tarballs (.tar, .gz, .zip) -> Red
-    if (is_tarball(filename))
-    {
-        return COLOR_RED;
-    }
-
-    // Executables (Check execute bits) -> Green
-    if (info.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
-    {
-        return COLOR_GREEN;
-    }
+    if (is_tarball(filename)) return COLOR_RED;
+    if (info.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) return COLOR_GREEN;
 
     return COLOR_RESET;
 }
@@ -142,7 +126,8 @@ int compare_names(const void *a, const void *b)
     return strcmp(str1, str2);
 }
 
-void do_ls(const char *dir, enum DisplayMode mode)
+// Task 3: Modified Core Function for Recursion
+void do_ls(const char *dir, enum DisplayMode mode, int recursive, int is_first_dir)
 {
     struct dirent *entry;
     DIR *dp = opendir(dir);
@@ -151,6 +136,12 @@ void do_ls(const char *dir, enum DisplayMode mode)
     {
         fprintf(stderr, "Cannot open directory: %s\n", dir);
         return;
+    }
+
+    // Print header if in recursive mode and not the very first directory printed by main
+    if (recursive && !is_first_dir)
+    {
+        printf("\n%s:\n", dir);
     }
 
     int capacity = 10;
@@ -168,6 +159,7 @@ void do_ls(const char *dir, enum DisplayMode mode)
     errno = 0;
     while ((entry = readdir(dp)) != NULL)
     {
+        // Ignore hidden files and standard relative entries (. and ..)
         if (entry->d_name[0] == '.')
             continue;
 
@@ -205,8 +197,10 @@ void do_ls(const char *dir, enum DisplayMode mode)
         return;
     }
 
+    // Sort entries alphabetically
     qsort(filenames, count, sizeof(char *), compare_names);
 
+    // Pass 1: Print immediate contents of current directory
     if (mode == MODE_LONG)
     {
         for (int i = 0; i < count; i++)
@@ -223,6 +217,24 @@ void do_ls(const char *dir, enum DisplayMode mode)
         print_column_display(dir, filenames, count, max_len);
     }
 
+    // Pass 2: If recursive mode enabled, descend into subdirectories
+    if (recursive)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            char fullpath[1024];
+            snprintf(fullpath, sizeof(fullpath), "%s/%s", dir, filenames[i]);
+
+            struct stat info;
+            if (lstat(fullpath, &info) == 0 && S_ISDIR(info.st_mode))
+            {
+                // Recursive call with full path
+                do_ls(fullpath, mode, recursive, 0);
+            }
+        }
+    }
+
+    // Cleanup allocated memory
     for (int i = 0; i < count; i++)
     {
         free(filenames[i]);
@@ -242,8 +254,7 @@ void print_horizontal_display(const char *dir, char **filenames, int count, int 
 
     int col_width = max_len + 2;
     int cols = term_width / col_width;
-    if (cols < 1)
-        cols = 1;
+    if (cols < 1) cols = 1;
 
     for (int i = 0; i < count; i++)
     {
@@ -276,8 +287,7 @@ void print_column_display(const char *dir, char **filenames, int count, int max_
 
     int col_width = max_len + 2;
     int cols = term_width / col_width;
-    if (cols < 1)
-        cols = 1;
+    if (cols < 1) cols = 1;
 
     int rows = (count + cols - 1) / cols;
 
